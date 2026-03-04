@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Gender Detection</title>
+    <style>
+        #camera { width: 100%; max-width: 640px; }
+        #scanResult { margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+<video id="camera" width="640" height="480" autoplay></video>
+<button onclick="startScan()">Start Scan</button>
+<div id="scanResult"></div>
+
+<script>
+    const video = document.getElementById('camera');
+    let capturing = false;
+
+    // Get user media (camera access)
+    navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+            video.srcObject = stream;
+        })
+        .catch(error => {
+            console.error('Camera access error:', error);
+            alert('Unable to access camera. Please check your permissions.');
+        });
+
+    // Function to send frame data to backend
+    async function sendFrame() {
+        if (!capturing) return;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const context = canvas.getContext('2d');
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+        if (!blob) return;
+
+        const formData = new FormData();
+        formData.append('frame', blob);
+
+        const response = await fetch('http://127.0.0.1:5000/scan', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.error) {
+                document.getElementById('scanResult').innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
+            } else {
+                document.getElementById('scanResult').innerHTML = 
+                    `<p><strong>Gender:</strong> ${data.gender}</p>`;
+            }
+        }
+
+        // Repeat capture every 500ms for live detection
+        setTimeout(sendFrame, 500);
+    }
+
+    // Start scan
+    function startScan() {
+        capturing = true;
+        sendFrame();
+    }
+</script>
+
+</body>
+</html>
